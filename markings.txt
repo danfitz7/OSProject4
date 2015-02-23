@@ -1,0 +1,5 @@
+Explanation for markings:
+
+Mark for searching:
+?? - not sure if implement
+TODO - not implemented yet
