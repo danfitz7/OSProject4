@@ -7,22 +7,36 @@
 #include "api.h"
 #include "Error.h"
 
+vAddr evictRAM1(int memory);
+
+void evict(vAddr page_table_index, Level level_to_evict_from){
+}
+
+vAddr get_free_ram(){
+	vAddr newPage = findPage();
+	if (newPage == -1){
+		vAddr page_to_evict = get_page_to_evict(RAM);
+		evict(page_to_evict, RAM);
+	}
+}
+
 // Reserves memory location, sizeof(int)
 // Must be created in emulated RAM, pushing other pages 
 // into lower layers of hierarchy, if full
 // Return -1 if no memory available
 vAddr allocateNewInt(){
-	int i, address;
+	int i;
+	vAddr address;
 	vAddr newPage;
 	
-	//finds next unvalid page
-	newPage = findPage();
-	
-	//checks if memory is availbale
+	//checks if memory is available
 	if(newPage == -1){
 		printf("NO MEMORY: Exiting...\n");
 		exit(0);
 	}
+	
+	//finds next unvalid page
+	newPage = get_free_ram();//findPage();
 	
 	//checks if there is any space available
 	for(i=0; i < RAM_SIZE; i++){
@@ -31,7 +45,7 @@ vAddr allocateNewInt(){
 			ram[i] = 1;
 			address = i;
 			table[newPage].valid = 1;
-			table[newPage].locat= address;
+			table[newPage].location= address;
 			table[newPage].counter++;
 			table[newPage].timeAccessed = difftime(time(0), clk_start);
 			return newPage;
@@ -40,6 +54,10 @@ vAddr allocateNewInt(){
 	
 	//no space is available, must run eviction algorithm to make space
 	printf("\tRAM FULL. Evicting Page...\n");
+	if (i==RAM_SIZE){
+		
+	}
+	
 	if(setEviction == 1){
 		address = evictRAM1(1);
 		table[newPage].valid = 1;
@@ -61,6 +79,9 @@ vAddr allocateNewInt(){
 void init_arrays(){
 	int i;
 	
+	//TODO: what's this funciton callaed?
+	clk_start = current_time();
+	
 	for(i=0; i<RAM_SIZE; i++){
 		ram[i] = 0;
 	}
@@ -74,7 +95,7 @@ void init_arrays(){
 	}
 	
 	for(i=0; i<SIZE_PAGE_TABLE; i++){
-		table[i].indx = i;
+		table[i].page_number = i;
 		table[i].lock = 0;
 		table[i].valid = 0;
 		table[i].location = -1; 
@@ -125,7 +146,7 @@ vAddr evictRAM1(int memory){
 	int loc = table[min].location;
 	
 	//do i need a lock here
-	copy_to_SSD1(&table[min]);
+	copy_to_SSD1(&(table[min]));
 	
 	return loc;
 	
@@ -141,6 +162,19 @@ void copy_to_SSD1(struct Page *page){
 		}
 	}
 	printf("NO ROOM IN SSD\n");
+	return;
+}
+
+void copy_to_HDD(struct Page *page){
+	int i;
+	for(i=0; i<HDD_SIZE; i++){
+		if(hdd[i] == 0){
+			ssd[i] = 1;
+			page->location = i + RAM_SIZE + SSD_SIZE;
+			return;
+		}
+	}
+	printf("NO ROOM IN HDD\n");
 	return;
 }
 
@@ -161,16 +195,18 @@ void memoryMaxer() {
 		indexes[index] = allocateNewInt();
 		int *value = accessIntPtr(indexes[index]);
 		*value = (index * 3);
-		unlockMemory(indexes[index]);
+		//unlockMemory(indexes[index]);
 	}
 
-	for (index = 0; index < SIZE_SIZE_PAGE_TABLE; ++index) {
-		freeMemory(indexes[index]);
-	}
+	/*for (index = 0; index < SIZE_SIZE_PAGE_TABLE; ++index) {
+		//freeMemory(indexes[index]);
+	}*/
 }
 
 
 //Run the actual memory management tool
 int main(){
+	init_arrays();
+	
 	memoryMaxer();
 }

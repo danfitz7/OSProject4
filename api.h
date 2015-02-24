@@ -17,13 +17,12 @@
 #define SSD_SLEEP 250000 		//0.25s
 #define HDISK_SLEEP 2500000		//2.5s
 
-
 typedef signed short vAddr;
 
-enum {
+typedef enum {
 	LRU = 0,
 	FIFO = 1,
-} //eviction types
+} QUQU_TYPE;//eviction types
 
 typedef enum {
 	RAM = 0,
@@ -33,7 +32,7 @@ typedef enum {
 } Level;
 
 /* page struct definition */
-struct Page{
+typedef struct{
 //	int data;				// data is only single interger ??
 	vAddr page_number;		// page frame number (vAddr address), 0 to 1000
 	int valid;				// valid bit, make sure valid bits are zero at start ??
@@ -43,9 +42,9 @@ struct Page{
 	int counter;			// for LRU, increments with every memory access ??
 	Level location;			// where is the page, RAM, SSD, HD ssd or hd 
 	double timeAccessed; 	// records last time page was accessed ??
-};
+} Page;
 
-struct Page table[SIZE_PAGE_TABLE];//page table
+Page table[SIZE_PAGE_TABLE];//page table
 
 //memory arrays
 int ram[RAM_SIZE];
@@ -53,7 +52,8 @@ int ssd[SSD_SIZE];
 int disk[DISK_SIZE];
 
 //which eviction algorithm to use
-int setEviction;				//eviction type to use
+//int setEviction;				//eviction type to use
+vAddr (*get_page_to_evict)(Level l);
 
 time_t clk_start;				//begins clock
 
