@@ -42,17 +42,19 @@ typedef enum {
 	NONE = -1
 } Level;
 
+typedef unsigned long program_time;
+
 // Page Table Struct
 typedef struct{
 //	vAddr page_number;		// This page's element index in the page table, used for printing. (a vAddr for the page frame number from 0 to SIZE_PAGE_TABLE)
 	Level location;			// What is the lowest level of the memory hierarchy where this page can be found? (RAM, SSD, HDD)
-	data_address offset;	// Offset into the corresponding physical memory.
+	data_address address;	// index (address) into the corresponding physical memory (emulated by the arrays below).
 	boolean allocated;		// is the page allocated/valid?
 //	boolean modified; 		// set dirty bit
 //	int referenced; 		// ??
 	boolean lock;				// locked for current user
 	int counter;			// for LRU, increments with every memory access
-	double timeAccessed; 	// records last time page was accessed
+	program_time timeAccessed; // records last time page was accessed
 } Page;
 Page table[SIZE_PAGE_TABLE]; // Page table
 
@@ -70,7 +72,7 @@ data* physical_memories[] = {ram, ssd, hdd};
 
 // API prototypes
 vAddr allocateNewInt();				// Reserves a new memory location, which is of sizeof(int), in the emulated RAM. It evicts other pages from RAM if needed. Returns -1 if no memory is available.
-data * accessIntPtr(vAddr address);  // Obtains the indicated memory page, from lower levels of the hierarchy if needed, and returns a pointer to the corresponding data (integer) in RAM.
+data * accessIntPtr(vAddr address); // Obtains the indicated memory page, from lower levels of the hierarchy if needed, and returns a pointer to the corresponding data (integer) in RAM.
 void unlockMemory(vAddr address);	// Allows the user to indicate that the page can be swapped to disk, if needed, invalidating any previous pointers they had to the memory.
 void freeMemory(vAddr address);		// Frees the page and deletes any swapped out copies.
 
