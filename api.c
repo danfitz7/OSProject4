@@ -7,17 +7,90 @@
 #include "api.h"
 #include "Error.h"
 
-vAddr evictRAM1(int memory);
+time_t clk_start; // begins clock
 
-void evict(vAddr page_table_index, Level level_to_evict_from){
+
+// FUNCTION HEADERS
+
+// setup, debug
+void init_arrays();
+void printPage(vAddr page_index);
+
+// Different page eviction algorithms
+vAddr evict_LRU(int memory);
+vAddr evict_Clock(int memory);
+
+// Eviction and swapping helper functions
+data_address get_next_unallocated_pageframe_in_level(Level l);
+data_address evict_page_from_level(Level level_to_evict_from);
+void setPage(vAddr page, Level level, data_address address)
+void load_page_to_level(vAddr page,Level l);
+
+// Returns a unallocated page from the table, or -1 if there are no unallocated pages.
+vAddr get_unallocated_page(){
+	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){
+		if(table[i].allocated == False){
+			return i;
+		}
+	}
+	return -1;
 }
 
-vAddr get_free_ram(){
-	vAddr newPage = findPage();
-	if (newPage == -1){
-		vAddr page_to_evict = get_page_to_evict(RAM);
-		evict(page_to_evict, RAM);
+
+// When the requested page is not in RAM, it is retrieved it from the appropriate backing store.
+// If it is on the hard disk, it is put it onto SSD.
+// it is then transferred from the SSD into main memory.
+// The page fault handler must evict pages to make room when swapping in.
+// The page fault handler is responsible for inserting the appropriate delays based on the memory type.
+//void page_fault_handler(vAddr page){
+//}
+
+// When a page fault occurs, but there is no place to store the faulted page, a page is evicted a page to make room.
+// A locked page cannot be evicted.
+// Two different eviction algorithms may be used to choose an unlocked page to evict
+vAddr (*get_page_to_evict)(Level l) = evict_LRU; // Pointer to the eviction function/algorithm to use
+
+// returns the physical address for the next unallocated space in the given level of memory, or -1 of that memory level is full
+data_address get_next_unallocated_pageframe_in_level(Level l){
+	for(vAddr i=0; i<memory_sizes[l]); i++){
+		if(memory_bitmaps[l][i] == False){
+			return i;
+		}
 	}
+	return -1;
+}
+
+// Helper function to evict the given page from the given memory level (recursive on memory levels.)
+data_address evict_page_from_level(Level level_to_evict_from){
+	Level level_above = level_to_evict_from + 1;
+	if (level_above == NONE){
+		printf("ERROR: Cannot evict from hard drive!");
+	}else{
+		vAddr page_to_evict = get_page_to_evict(level); // get the page to evict from the given memory level using the current page eviction algorithm
+		data_address evicted_address = table[page_to_evict].location;	// save the data address of the page we're about to evict
+		load_page_to_level(page_to_evict, level_above); // copy the evicted page to the next memory level (recursivly evicting pages from that level if needed)
+		return evicted_address;
+	}
+}
+
+// Sets the given page to the given physical address for the given level
+void setPage(vAddr page, Level level, data_address address){	
+	printf("\tMemory Allocated\n");
+	memory_bitmaps[level][address] = True;	// record that this memory is being used in the appropriate memory bitmap
+	table[page].allocated = True;			// record that this page frame is being used
+	table[page].location= level;			// record what level the data is being stored in
+	table[page].address = address;			// record where in that level the data is being stored
+	table[page].counter++;					// increment the counter every time we access a page
+	table[page].timeAccessed = difftime(time(0), clk_start);	// record the time of access
+}
+
+// loads the given page to the given memory level, evicting pages from that level to higher levels to make space if needed (recursive)
+void load_page_to_level(vAddr page,Level l){
+	data_address address = get_next_unallocated_pageframe_in_level(l); // gets free memory space at the given memory level
+	if (address == -1){						// if this memory level is full
+		address = evict_page_from_level(l);	// evict a page using the page eviction algorithm and use the memory it was taking.
+	}
+	set_page(page, level, address);			// set the page to use this memory at this level.
 }
 
 // Reserves memory location, sizeof(int)
@@ -25,188 +98,98 @@ vAddr get_free_ram(){
 // into lower layers of hierarchy, if full
 // Return -1 if no memory available
 vAddr allocateNewInt(){
-	int i;
-	vAddr address;
-	vAddr newPage;
 	
-	//checks if memory is available
-	if(newPage == -1){
-		printf("NO MEMORY: Exiting...\n");
-		exit(0);
+	//finds an unallocated page in the table
+	vAddr page = get_unallocated_page();
+	
+	// Checks if memory is available (there was at-least one unallocated page)
+	if(page == -1){
+		printf("NO MEMORY: Returning -1...\n");
+		return -1;
 	}
 	
-	//finds next unvalid page
-	newPage = get_free_ram();//findPage();
+	load_page_to_level(page, RAM);
 	
-	//checks if there is any space available
-	for(i=0; i < RAM_SIZE; i++){
-		if(ram[i] == 0 && table[newPage].lock == 0){
-			printf("\tMemory Allocated\n");
-			ram[i] = 1;
-			address = i;
-			table[newPage].valid = 1;
-			table[newPage].location= address;
-			table[newPage].counter++;
-			table[newPage].timeAccessed = difftime(time(0), clk_start);
-			return newPage;
-		}
-	}
-	
-	//no space is available, must run eviction algorithm to make space
-	printf("\tRAM FULL. Evicting Page...\n");
-	if (i==RAM_SIZE){
-		
-	}
-	
-	if(setEviction == 1){
-		address = evictRAM1(1);
-		table[newPage].valid = 1;
-		table[newPage].location = address;
-		table[newPage].counter++;
-		table[newPage].timeAccessed = difftime(time(0), clk_start);
-		printf("\t\tMemory Allocated\n");
-	}
-	else if(setEviction == 2){
-		address = evictRAM2();
-		//TODO
-		printf("\t\tMemory Allocated\n");
-	}
-	
-	return newPage;
+	return page;
 }
 
-//initializes all array values to zero
-void init_arrays(){
-	int i;
-	
-	//TODO: what's this funciton callaed?
-	clk_start = current_time();
-	
-	for(i=0; i<RAM_SIZE; i++){
-		ram[i] = 0;
-	}
-	
-	for(i=0; i<SSD_SIZE; i++){
-		ssd[i] = 0;
-	}
-	
-	for(i=0; i<DISK_SIZE; i++){
-		disk[i] = 0;
-	}
-	
-	for(i=0; i<SIZE_PAGE_TABLE; i++){
-		table[i].page_number = i;
-		table[i].lock = 0;
-		table[i].valid = 0;
-		table[i].location = -1; 
-		table[i].counter = 0; 
-	}
-	
-	return;
-}
-
-//grabs next unvalid page
-vAddr findPage(){
-	int i;
-	for(i=0; i<SIZE_PAGE_TABLE; i++){
-		if(table[i].valid == 0){
-			return i;
-		}
-	}
-	
-	
+vAddr evict_Clock(Level level){
+	// TODO
 	return -1;
+}
+
+// First eviction algorithm - Least Recently Used (LRU)
+vAddr evict_LRU(Level level){
+	vAddr min = -1;
 	
-}
-
-void printPage(struct Page this_page){
-	printf("=============\nPage Index: %d\nAllocated: %d\nLocation: %d\nTime Accessed: %f\n=============\n", 
-		this_page.page_number, this_page.valid, this_page.location, this_page.timeAccessed);
-}
-
-
-//first eviction algorithm - Least Recently Used (LRU)
-vAddr evictRAM1(int memory){
-	int i;
-	int min = -1;
 	//finds page with LRU access
-	for(i=0; i<SIZE_PAGE_TABLE; i++){
-		if(((-1) < table[i].location && table[i].location < RAM_SIZE) && table[i].lock == 0){
-			if(min == -1){
+	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){
+		if((table[i].location == level && table[i].lock == 0){	// if the table is in the given level and is unlocked
+			if(min == -1){	// if min hasn't been set yet
 				min = i;
-			}
-			else{
+			}else{
+				// compare to the previous min
 				if(table[i].timeAccessed < table[min].timeAccessed){
 					min = i;
 				}
 			}
 		}
 	}
-	//NEED to handle shifting the evicted page down
-	int loc = table[min].location;
 	
-	//do i need a lock here
-	copy_to_SSD1(&(table[min]));
-	
-	return loc;
-	
+
+	return min;
 }
 
-void copy_to_SSD1(struct Page *page){
-	int i;
-	for(i=0; i<SSD_SIZE; i++){
-		if(ssd[i] == 0){
-			ssd[i] = 1;
-			page->location = i + RAM_SIZE;
-			return;
-		}
-	}
-	printf("NO ROOM IN SSD\n");
-	return;
+// Prints page info.
+void printPage(vAddr page_index){
+	printf("=============\nPage Index: %d\nAllocated: %d\nLocation: %d\nTime Accessed: %f\n=============\n", 
+		page_index, table[page_index].valid, table[page_index].location, table[page_index].timeAccessed);
 }
 
-void copy_to_HDD(struct Page *page){
-	int i;
-	for(i=0; i<HDD_SIZE; i++){
-		if(hdd[i] == 0){
-			ssd[i] = 1;
-			page->location = i + RAM_SIZE + SSD_SIZE;
-			return;
-		}
-	}
-	printf("NO ROOM IN HDD\n");
-	return;
-}
-
-//2nd eviction algorithm
-vAddr evictRAM2(){
-	//TODO
-	return 0;
-	
-}
-
-
-//Allocate, access, update, unlock, and free memory
-//While calling allocateNewInt, needs to swap old pages to secondary memory
+#define FOREVER 187.5 // forever, in seconds.
+// Stress test function, should take FOREVER
+// Allocate, access, update, unlock, and free memory
+// While calling allocateNewInt, needs to swap old pages to secondary memory
 void memoryMaxer() {
 	vAddr indexes[SIZE_SIZE_PAGE_TABLE];
-	int index = 0;
+	vAddr index = 0;
 	for (index = 0; index < SIZE_SIZE_PAGE_TABLE; ++index) {
 		indexes[index] = allocateNewInt();
-		int *value = accessIntPtr(indexes[index]);
+		data *value = accessIntPtr(indexes[index]);
 		*value = (index * 3);
-		//unlockMemory(indexes[index]);
+		unlockMemory(indexes[index]);
 	}
 
-	/*for (index = 0; index < SIZE_SIZE_PAGE_TABLE; ++index) {
-		//freeMemory(indexes[index]);
-	}*/
+	for (index = 0; index < SIZE_SIZE_PAGE_TABLE; ++index) {
+		freeMemory(indexes[index]);
+	}
 }
 
+// Initializes all array values to zero
+void init_arrays(){
+
+	// TODO: what's this function called?
+	//clk_start = current_time();
+	
+	// Clear all memory bitmaps
+	for (Level l = 0;l<3;l++){
+		for (vAddr i=0;i<memory_sizes[l];i++){
+			memory_bitmaps[l][i]=False;
+		}
+	}
+	
+	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){
+		table[i].page_number = i;
+		table[i].lock = False;
+		table[i].allocated = False;
+		table[i].location = NONE; 
+		table[i].counter = 0; 
+	}
+}
 
 //Run the actual memory management tool
 int main(){
-	init_arrays();
-	
-	memoryMaxer();
+	init_arrays();			// setup
+	clk_start = time(0);	// program start time
+	memoryMaxer();			// test
 }

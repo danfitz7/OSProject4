@@ -1,4 +1,4 @@
-//Project 4
+// OS Project 4
 
 #ifndef _API_H_
 #define _API_H_
@@ -9,62 +9,69 @@
 //define memory sizes
 #define RAM_SIZE 25
 #define SSD_SIZE 100
-#define DISK_SIZE 1000
+#define HDD_SIZE 1000
+unsigned int memory_sizes[] = {RAM_SIZE, SSD_SIZE, HDD_SIZE};
+
 #define SIZE_PAGE_TABLE 1000
 
 // Set delay time
 #define RAM_SLEEP 0 			//0s
 #define SSD_SLEEP 250000 		//0.25s
-#define HDISK_SLEEP 2500000		//2.5s
+#define HDD_SLEEP 2500000		//2.5s
+unsigned int memory_delay_times[] = {RAM_SLEEP, SSD_SLEEP, HDD_SLEEP};
 
+// Helps to have Booleans
+#define boolean unsigned short
+#define True 1
+#define False 0
+
+// Type for data
+typedef int data;
+
+// Type for page number (an index into the page table) - virtual memory address
 typedef signed short vAddr;
 
-typedef enum {
-	LRU = 0,
-	FIFO = 1,
-} QUQU_TYPE;//eviction types
+// Type for the physical address of data (an index into one of the emulated physical memories)
+typedef int data_address;
 
+// Memory hierarchy levels
 typedef enum {
 	RAM = 0,
 	SSD = 1,
 	HD = 2,
-	NONE = -1,
+	NONE = -1
 } Level;
 
-/* page struct definition */
+// Page Table Struct
 typedef struct{
-//	int data;				// data is only single interger ??
-	vAddr page_number;		// page frame number (vAddr address), 0 to 1000
-	int valid;				// valid bit, make sure valid bits are zero at start ??
-//	int modified; 			//set dirty bit ??
-//	int referenced; 		//??
-	int lock;				// locked for current user
-	int counter;			// for LRU, increments with every memory access ??
-	Level location;			// where is the page, RAM, SSD, HD ssd or hd 
-	double timeAccessed; 	// records last time page was accessed ??
+//	vAddr page_number;		// This page's element index in the page table, used for printing. (a vAddr for the page frame number from 0 to SIZE_PAGE_TABLE)
+	Level location;			// What is the lowest level of the memory hierarchy where this page can be found? (RAM, SSD, HDD)
+	data_address offset;	// Offset into the corresponding physical memory.
+	boolean allocated;		// is the page allocated/valid?
+//	boolean modified; 		// set dirty bit
+//	int referenced; 		// ??
+	boolean lock;				// locked for current user
+	int counter;			// for LRU, increments with every memory access
+	double timeAccessed; 	// records last time page was accessed
 } Page;
+Page table[SIZE_PAGE_TABLE]; // Page table
 
-Page table[SIZE_PAGE_TABLE];//page table
+// Memory bitmaps, used to keep track of what physical memory is being used
+boolean ram_bitmap[RAM_SIZE];
+boolean ssd_bitmap[SSD_SIZE];
+boolean hdd_bitmap[HDD_SIZE];
+boolean* memory_bitmaps[] = {ram_bitmap, ssd_bitmap, hdd_bitmap};
 
-//memory arrays
-int ram[RAM_SIZE];
-int ssd[SSD_SIZE];
-int disk[DISK_SIZE];
+// Memory arrays (emulating actual storage devices)
+data ram[RAM_SIZE];
+data ssd[SSD_SIZE];
+data hdd[HDD_SIZE];
+data* physical_memories[] = {ram, ssd, hdd};
 
-//which eviction algorithm to use
-//int setEviction;				//eviction type to use
-vAddr (*get_page_to_evict)(Level l);
-
-time_t clk_start;				//begins clock
-
-//prototypes
-vAddr allocateNewInt();
-int * accessIntPtr(vAddr address);
-void unlockMemory(vAddr address);
-void freeMemory(vAddr address);
-
-void init_arrays();
-vAddr findPage();
-void printPage();
+// API prototypes
+vAddr allocateNewInt();				// Reserves a new memory location, which is of sizeof(int), in the emulated RAM. It evicts other pages from RAM if needed. Returns -1 if no memory is available.
+data * accessIntPtr(vAddr address);  // Obtains the indicated memory page, from lower levels of the hierarchy if needed, and returns a pointer to the corresponding data (integer) in RAM.
+void unlockMemory(vAddr address);	// Allows the user to indicate that the page can be swapped to disk, if needed, invalidating any previous pointers they had to the memory.
+void freeMemory(vAddr address);		// Frees the page and deletes any swapped out copies.
 
 #endif //_API_H_

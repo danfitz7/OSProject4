@@ -16,7 +16,7 @@ Dealing with page faults
 	4. Update the page table to refer to the new page frame.
 	5. Return control to the program, transparently retrying the instruction that caused the page fault.
 
-If we run allocate 25 times, it will immedietly add 25 entries to the RAM array and make 25 entries in the page table. 
+If we run allocate 25 times, it will immediately add 25 entries to the RAM array and make 25 entries in the page table. 
 If we allocate more than 25 times, but less than 125 times, the system will swap old values in RAM to the SSD and bring new items into RAM.
 If we allocate more than 125 times but less than 1000 times without freeing, then the system will swap old values in RAM into the SSD and then old values in the SSD into the HDD.
 If we allocate more than 1000 times without freeing, system will alert.
@@ -35,6 +35,6 @@ Option 2:
 page table holds a thousand entries
 to determine if memory is full, we can iterate through the page table and stop when a page has allocated (valid) == 0.
 
-The lower levels of the memory heirarchy are going to stay as full as possible. 
+The lower levels of the memory hierarchy are going to stay as full as possible. 
 
-When we add a page to the table, store a pointer to its location in the memory heirarchy. When we free, we just have to "unallocate" any reference to this item in memory
+When we add a page to the table, store a pointer to its location in the memory hierarchy. When we free, we just have to "unallocate" any reference to this item in memory
