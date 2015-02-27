@@ -4,6 +4,7 @@
 #include <semaphore.h> 
 #include <unistd.h> // usleep
 #include <time.h>
+#include <sys/time.h>
 #include "api.h"
 #include "Error.h"
 #include "pageQueues.h"
@@ -32,11 +33,13 @@ void set_page(vAddr page, Level level, data_address address);
 void reset_page(vAddr page);
 void load_page_to_level(vAddr page,Level l);
 
+
 // helper funciton - returns the current time since the program started, in ms
+program_time startTime = 0;
 program_time get_current_time(){
-	// TODO
-	return 0;
-	//difftime(time(0), clk_start);	// record the time of access
+	struct timeval curTime;
+	gettimeofday(&curTime, NULL);
+	return (curTime.tv_sec*1000 + curTime.tv_usec/1000) - startTime;
 }
 
 // Returns a unallocated page from the table, or -1 if there are no unallocated pages.
@@ -167,7 +170,7 @@ void set_page(vAddr page, Level level, data_address address){
 // The page fault handler must evict pages to make room when swapping in.
 // The page fault handler is responsible for inserting the appropriate delays based on the memory type.
 void load_page_to_level(vAddr page,Level level){ // loads the given page to the given memory level, evicting pages from that level to higher levels to make space if needed (recursive)
-	printTabs(); printf("\tLoading page %d to level %d...\n", page, level);
+	printf("\n"); printTabs(); printf("\tLoading page %d to level %d...\n", page, level);
 	recursionLevel++;
 	
 	data_address address = get_next_unallocated_pageframe_in_level(level); // gets free memory space at the given memory level
@@ -266,7 +269,7 @@ void printPageTable(){
 	printf("\nPAGE TABLE:\n");
 	for (vAddr page =0;page<SIZE_PAGE_TABLE;page++){
 		if (table[page].allocated==True){
-			printf("\tP%3d L{%2d,%2d,%2d}\n", page, table[page].addresses[0], table[page].addresses[1], table[page].addresses[2]);
+			printf("\tP %3d L{%2d,%2d,%2d} T %lu\n", page, table[page].addresses[0], table[page].addresses[1], table[page].addresses[2], table[page].timeAccessed);
 		}
 	}
 }
@@ -311,6 +314,8 @@ void reset_page(vAddr page){
 
 // Initializes all array values to zero
 void init_arrays(){
+	
+	startTime = get_current_time();
 	
 	// Clear all memory bitmaps initially
 	for (Level l = 0;l<3;l++){
