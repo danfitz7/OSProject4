@@ -54,7 +54,6 @@ vAddr get_unallocated_page(){
 // When a page fault occurs, but there is no place to store the faulted page, a page is evicted a page to make room.
 // A locked page cannot be evicted.
 // Two different eviction algorithms may be used to choose an unlocked page to evict
-
 vAddr evict_Clock(Level level){
 	// TODO
 	return -1;
@@ -113,6 +112,7 @@ data_address evict_page_from_level(Level level_to_evict_from){
 				update_page_data(page_to_evict, level_to_evict_from, level_above);
 			}
 		}
+		memory_bitmaps[level_to_evict_from][evicted_address] = False; // Clear the memory bitmap for the memory we just evicted to a highewr level.
 		return evicted_address;
 	}
 }
@@ -124,6 +124,13 @@ void set_page(vAddr page, Level level, data_address address){
 	table[page].allocated = True;			// record that this page frame is being used
 //	table[page].location= level;			// record what level the data is being stored in
 	table[page].addresses[level] = address;	// record where in that level the data is being stored
+	for (Level l = 1;l<3;l++){
+		if (table[page].addresses[l] != -1){	// if we found a copy of this page in some higher level of memory
+			update_page_data(page, level, l);	// copy from that level.
+			break;
+		}
+	}
+	
 	table[page].counter++;					// increment the counter every time we access a page
 	table[page].timeAccessed = get_current_time();
 }
@@ -160,14 +167,19 @@ vAddr allocateNewInt(){
 }
 
 // Obtains the indicated memory page, from lower levels of the hierarchy if needed, and returns a pointer to the corresponding data (integer) in RAM.
-data * accessIntPtr(vAddr address){
-	// TODO
-	return NULL;
+data * accessIntPtr(vAddr page){
+	data_address RAM_address = table[page].addresses[RAM];
+	if (RAM_address != -1){
+		return &(ram[RAM_address]);
+	}else{
+		// Need to bring the page into ram
+		load_page_to_level(page, RAM);
+		return &(ram[table[page].addresses[RAM]]);
+	}
 }
 
 // Allows the user to indicate that the page can be swapped to disk, if needed, invalidating any previous pointers they had to the memory.
 void unlockMemory(vAddr page){
-	// TODO
 	table[page].lock=False;
 }	
 
@@ -211,7 +223,9 @@ void memoryMaxer() {
 void reset_page(vAddr page){
 	table[page].lock = False;
 	table[page].allocated = False;
+	table[page].modified = False;
 	table[page].counter = 0; 
+	table[page].timeAccessed = 0;
 }
 
 // Initializes all array values to zero
