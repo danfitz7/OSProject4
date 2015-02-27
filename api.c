@@ -142,6 +142,8 @@ vAddr allocateNewInt(){
 	
 	load_page_to_level(page, RAM);
 	
+	table[page].lock=True;
+
 	return page;
 }
 
@@ -152,16 +154,17 @@ data * accessIntPtr(vAddr address){
 }
 
 // Allows the user to indicate that the page can be swapped to disk, if needed, invalidating any previous pointers they had to the memory.
-void unlockMemory(vAddr address){
+void unlockMemory(vAddr page){
 	// TODO
+	table[page].lock=False;
 }	
 
 // Frees the page and deletes any swapped out copies.
-void freeMemory(vAddr address){
-	// TODO
+void freeMemory(vAddr page){
+	// TODO: clear copies of page in other levels
+	memory_bitmaps[table[page].level][table[page].address] = False; // clear memory
+	reset_page(page);												// reset page
 }	
-
-
 
 // Prints page info.
 void printPage(vAddr page_index){
@@ -188,6 +191,13 @@ void memoryMaxer() {
 	}
 }
 
+void reset_page(vAddr page){
+	table[page].lock = False;
+	table[page].allocated = False;
+	table[page].location = NONE; 
+	table[page].counter = 0; 
+}
+
 // Initializes all array values to zero
 void init_arrays(){
 	
@@ -200,10 +210,7 @@ void init_arrays(){
 	
 	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){
 //		table[i].page_number = i;
-		table[i].lock = False;
-		table[i].allocated = False;
-		table[i].location = NONE; 
-		table[i].counter = 0; 
+		reset_page(i);
 	}
 }
 
