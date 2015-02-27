@@ -15,8 +15,8 @@ void init_arrays();
 void printPage(vAddr page_index);
 
 // Different page eviction algorithms
-vAddr evict_LRU(int memory);
-vAddr evict_Clock(int memory);
+vAddr evict_LRU(Level level);
+vAddr evict_Clock(Level level);
 
 // Eviction and swapping helper functions
 data_address get_next_unallocated_pageframe_in_level(Level l);
@@ -66,7 +66,7 @@ vAddr evict_LRU(Level level){
 	
 	//finds page with LRU access
 	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){
-		if(table[i].location == level && table[i].lock == 0){	// if the table is in the given level and is unlocked
+		if(table[i].addresses[level] != -1 && table[i].lock == 0){	// if the table is in the given level and is unlocked
 			if(min == -1){	// if min hasn't been set yet
 				min = i;
 			}else{
@@ -93,6 +93,11 @@ data_address get_next_unallocated_pageframe_in_level(Level l){
 	return -1;
 }
 
+// copies the page data copy in one level to another
+void update_page_data(vAddr page, Level from, Level to){
+	physical_memories[to][table[page].addresses[to]] = physical_memories[from][table[page].addresses[from]]; // copy data to a higher level.
+}
+
 // Helper function to evict the given page from the given memory level (recursive on memory levels.)
 data_address evict_page_from_level(Level level_to_evict_from){
 	Level level_above = level_to_evict_from + 1;
@@ -100,8 +105,14 @@ data_address evict_page_from_level(Level level_to_evict_from){
 		printf("ERROR: Cannot evict from hard drive!");
 	}else{
 		vAddr page_to_evict = (*get_page_to_evict)(level_to_evict_from); // get the page to evict from the given memory level using the current page eviction algorithm
-		data_address evicted_address = table[page_to_evict].location;	// save the data address of the page we're about to evict
-		load_page_to_level(page_to_evict, level_above); // copy the evicted page to the next memory level (recursivly evicting pages from that level if needed)
+		data_address evicted_address = table[page_to_evict].addresses[level_to_evict_from];	 // save the data address on this level of the page we're about to evict
+		if (table[page_to_evict].addresses[level_above] == -1){			 // if the page we're evicting has a copy in the higher level, then we don't need to copy it, we can just overwrite it
+			load_page_to_level(page_to_evict, level_above); 			 // copy the evicted page to the next memory level (recursively evicting pages from that level if needed)
+		}else{
+			if (table[page_to_evict].modified == True){
+				update_page_data(page_to_evict, level_to_evict_from, level_above);
+			}
+		}
 		return evicted_address;
 	}
 }
@@ -111,8 +122,8 @@ void set_page(vAddr page, Level level, data_address address){
 	printf("\tMemory Allocated\n");
 	memory_bitmaps[level][address] = True;	// record that this memory is being used in the appropriate memory bitmap
 	table[page].allocated = True;			// record that this page frame is being used
-	table[page].location= level;			// record what level the data is being stored in
-	table[page].address = address;			// record where in that level the data is being stored
+//	table[page].location= level;			// record what level the data is being stored in
+	table[page].addresses[level] = address;	// record where in that level the data is being stored
 	table[page].counter++;					// increment the counter every time we access a page
 	table[page].timeAccessed = get_current_time();
 }
@@ -143,7 +154,7 @@ vAddr allocateNewInt(){
 	
 	load_page_to_level(page, RAM);
 	
-	table[page].lock=True;
+//	table[page].lock=True;
 
 	return page;
 }
@@ -163,14 +174,18 @@ void unlockMemory(vAddr page){
 // Frees the page and deletes any swapped out copies.
 void freeMemory(vAddr page){
 	// TODO: clear copies of page in other levels
-	memory_bitmaps[table[page].level][table[page].address] = False; // clear memory
+	for (Level l = 0;l<3;l++){
+		if (table[page].addresses[l] != -1){
+			memory_bitmaps[l][table[page].addresses[l]] = False; // clear memory for the copy in this level
+		}
+	}
 	reset_page(page);												// reset page
 }	
 
 // Prints page info.
 void printPage(vAddr page_index){
-	printf("=============\nPage Index: %d\nAllocated: %d\nLocation: %d\nTime Accessed: %lu\n=============\n", 
-		page_index, table[page_index].allocated, table[page_index].location, table[page_index].timeAccessed);
+	printf("=============\nPage Index: %d\nAllocated: %d\nLocation: %d %d %d\nTime Accessed: %lu\n=============\n", 
+		page_index, table[page_index].allocated, table[page_index].addresses[0], table[page_index].addresses[1], table[page_index].addresses[2],table[page_index].timeAccessed);
 }
 
 #define FOREVER 187.5 // forever, in seconds.
@@ -192,10 +207,10 @@ void memoryMaxer() {
 	}
 }
 
+// resets the given page struct (but does not clear the memory botmaps for it's data copies)
 void reset_page(vAddr page){
 	table[page].lock = False;
 	table[page].allocated = False;
-	table[page].location = NONE; 
 	table[page].counter = 0; 
 }
 

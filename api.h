@@ -38,8 +38,8 @@ typedef int data_address;
 typedef enum {
 	RAM = 0,
 	SSD = 1,
-	HD = 2,
-	NONE = -1
+	HDD = 2,
+	NONE = 3
 } Level;
 
 typedef unsigned long program_time;
@@ -47,12 +47,12 @@ typedef unsigned long program_time;
 // Page Table Struct
 typedef struct{
 //	vAddr page_number;		// This page's element index in the page table, used for printing. (a vAddr for the page frame number from 0 to SIZE_PAGE_TABLE)
-	Level location;			// What is the lowest level of the memory hierarchy where this page can be found? (RAM, SSD, HDD)
-	data_address address;	// index (address) into the corresponding physical memory (emulated by the arrays below).
+//	Level location;			// What is the lowest level of the memory hierarchy where this page can be found? (RAM, SSD, HDD)
+	data_address addresses[3];	// index (address) into the corresponding physical memory (emulated by the arrays below). -1 if there is no copy on that level of memory.
 	boolean allocated;		// is the page allocated/valid?
-//	boolean modified; 		// set dirty bit
+	boolean modified; 		// set dirty bit
 //	int referenced; 		// ??
-	boolean lock;				// locked for current user
+	boolean lock;			// locked for current user
 	int counter;			// for LRU, increments with every memory access
 	program_time timeAccessed; // records last time page was accessed
 } Page;
