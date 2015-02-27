@@ -6,7 +6,7 @@
 #include <time.h>
 #include "api.h"
 #include "Error.h"
-
+#include "pageQueues.h"
 // FUNCTION HEADERS
 
 // setup, debug, helper
@@ -22,6 +22,7 @@ vAddr evict_Clock(int memory);
 data_address get_next_unallocated_pageframe_in_level(Level l);
 data_address evict_page_from_level(Level level_to_evict_from);
 void set_page(vAddr page, Level level, data_address address);
+void reset_page(vAddr page);
 void load_page_to_level(vAddr page,Level l);
 
 // helper funciton - returns the current time since the program started, in ms
