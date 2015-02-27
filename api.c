@@ -9,6 +9,13 @@
 #include "pageQueues.h"
 // FUNCTION HEADERS
 
+unsigned int recursionLevel = 0;
+void printTabs(){
+	for (int i=0;i<recursionLevel;i++){
+		printf("\t");
+	}
+}
+
 // setup, debug, helper
 program_time get_current_time();
 void init_arrays();
@@ -75,60 +82,74 @@ vAddr (*get_page_to_evict)(Level); // Pointer to the eviction function/algorithm
 
 // returns the physical address for the next unallocated space in the given level of memory, or -1 of that memory level is full
 data_address get_next_unallocated_pageframe_in_level(Level l){
-	printf("\t\tGetting next unallocated memory in level %d...\n", l);
+	printTabs(); printf("\tGetting next unallocated memory in level %d...\n", l);
 	for(vAddr i=0; i<memory_sizes[l]; i++){
 		if(memory_bitmaps[l][i] == False){
-			printf("\t\t...memory %d is free in level %d.\n", i, l);
+			printTabs(); printf("\t...memory %d is free in level %d.\n", i, l);
 			return i;
 		}
 	}
-	printf("\t\t...no unallocated memory found in level %d.\n", l);
+	printTabs(); printf("\t...no unallocated memory found in level %d.\n", l);
 	return -1;
 }
 
 // copies the page data copy in one level to another
 void update_page_data(vAddr page, Level from, Level to){
-	printf("\t\t\tCopying page data for page %d from level %d to level %d.\n", page, from, to);
-	physical_memories[to][table[page].addresses[to]] = physical_memories[from][table[page].addresses[from]]; // copy data to a higher level.
+	printTabs(); printf("\t\t\tCopying page data for page %d from level %d to level %d.\n", page, from, to);
+	if (table[page].addresses[to] <0 || table[page].addresses[from] <0){
+		printTabs(); printf("\nERROR: tried to update page data from address %d in level %d to %d in level %d.\n", table[page].addresses[from], from, table[page].addresses[to], to);
+	}else{
+		physical_memories[to][table[page].addresses[to]] = physical_memories[from][table[page].addresses[from]]; // copy data to a higher level.
+	}
 }
 
 // Helper function to evict the given page from the given memory level (recursive on memory levels.)
 data_address evict_page_from_level(Level level_to_evict_from){
-	printf("\t\tEvicting page from level %d.\n", level_to_evict_from);
 	Level level_above = level_to_evict_from + 1;
 	if (level_above == NONE){
-		printf("ERROR: Cannot evict from hard drive!\n");
+		printTabs(); printf("ERROR: Cannot evict from hard drive!\n");
 	}else{
 		vAddr page_to_evict = (*get_page_to_evict)(level_to_evict_from); // get the page to evict from the given memory level using the current page eviction algorithm
+		printTabs(); printf("\tEvicting page %d from level %d.\n", page_to_evict, level_to_evict_from);
+		
+		// get the address of the data on this level
 		data_address evicted_address = table[page_to_evict].addresses[level_to_evict_from];	 // save the data address on this level of the page we're about to evict
+		
+		// Copy or update the page to the higher level, if it's not already there
 		if (table[page_to_evict].addresses[level_above] = -1){			 // if the page we're evicting has a copy in the higher level, then we don't need to copy it, we can just overwrite it
-			printf("\t\tPage has no copy in level above %d. Copying Page to level...\n", level_above);
+			printTabs(); printf("\tPage has no copy in next higher level %d. Copying Page to that level...\n", level_above);
 			load_page_to_level(page_to_evict, level_above); 			 // copy the evicted page to the next memory level (recursively evicting pages from that level if needed)
 		}else{
 			if (table[page_to_evict].modified == True){
-				printf("\t\tPage had a copy in the level above %d but was dirty. Updating higher level copy before overwriting this copy...\n", level_above);
+				printTabs(); printf("\tPage had a copy in the level above %d but was dirty. Updating higher level copy before overwriting this copy...\n", level_above);
 				update_page_data(page_to_evict, level_to_evict_from, level_above);
 			}else{
-				printf("\t\tPage had a copy in the level above %d but was not dirtyOverwriting this copy...\n", level_above);
+				printTabs(); printf("\tPage had a copy in the level above %d but was not dirtyOverwriting this copy...\n", level_above);
 			}
 		}
+		
+		// Clear this table from this level
+		table[page_to_evict].addresses[level_to_evict_from] = -1;  	 // Delete this table's reference to the data on this memory level (data will be overwritten when a new page is put in)
 		memory_bitmaps[level_to_evict_from][evicted_address] = False; // Clear the memory bitmap for the memory we just evicted to a highewr level.
+		
 		return evicted_address;
 	}
-	printf("\t\t...evicted page from level %d.\n", level_to_evict_from);
+	printTabs(); printf("\t...evicted page from level %d.\n", level_to_evict_from);
 }
 
 // Sets the given page to the given physical address for the given level
 void set_page(vAddr page, Level level, data_address address){	
-	printf("\t\tSetting page %d in level %d with address %d...\n", page, level, address);
+	printTabs(); printf("\tSetting page %d in level %d with address %d...\n", page, level, address);
 	
 	memory_bitmaps[level][address] = True;	// record that this memory is being used in the appropriate memory bitmap
 	table[page].allocated = True;			// record that this page frame is being used
 //	table[page].location= level;			// record what level the data is being stored in
 	table[page].addresses[level] = address;	// record where in that level the data is being stored
-	for (Level l = 1;l<3;l++){
+	
+	// search for higher-level copies to copy data from
+	for (Level l = 1;l<level;l++){
 		if (table[page].addresses[l] != -1){	// if we found a copy of this page in some higher level of memory
-			printf("\t\t\tCopying from higher level %d.\n", l);
+			printTabs(); printf("\t\tCopying data from higher level %d.\n", l);
 			update_page_data(page, level, l);	// copy from that level.
 			break;
 		}
@@ -137,7 +158,7 @@ void set_page(vAddr page, Level level, data_address address){
 	table[page].counter++;					// increment the counter every time we access a page
 	table[page].timeAccessed = get_current_time();
 	
-	printf("\t\t...set page %d in level %d with address %d.\n", page, level, address);
+	printTabs(); printf("\t...set page %d in level %d with address %d.\n", page, level, address);
 }
 
 // When the requested page is not in RAM, it is retrieved it from the appropriate backing store.
@@ -146,14 +167,21 @@ void set_page(vAddr page, Level level, data_address address){
 // The page fault handler must evict pages to make room when swapping in.
 // The page fault handler is responsible for inserting the appropriate delays based on the memory type.
 void load_page_to_level(vAddr page,Level level){ // loads the given page to the given memory level, evicting pages from that level to higher levels to make space if needed (recursive)
-	printf("\tLoading page %d to level %d...\n", page, level);
+	printTabs(); printf("\tLoading page %d to level %d...\n", page, level);
+	recursionLevel++;
+	
 	data_address address = get_next_unallocated_pageframe_in_level(level); // gets free memory space at the given memory level
 	if (address == -1){						// if this memory level is full
-		printf("\t\tNo free memory in level 5D found. Evicting a page...\n");
+		recursionLevel--;
+		printTabs(); printf("\t\tNo free memory in level %d found. Evicting a page...\n", level);
+		recursionLevel++;
+		
 		address = evict_page_from_level(level);	// evict a page using the page eviction algorithm and use the memory it was taking.
 	}
 	set_page(page, level, address);			// set the page to use this memory at this level.
-	printf("\t...Loaded page %d to level %d.\n", page, level);
+	
+	recursionLevel--;
+	printTabs(); printf("\t...Loaded page %d to level %d.\n", page, level);
 }
 
 // Reserves memory location, sizeof(int)
@@ -161,7 +189,7 @@ void load_page_to_level(vAddr page,Level level){ // loads the given page to the 
 // into lower layers of hierarchy, if full
 // Return -1 if no memory available
 vAddr allocateNewInt(){
-	printf("Allocating new int...\n");
+	printf("\nAllocating new int...\n");
 	
 	//finds an unallocated page in the table
 	vAddr page = get_unallocated_page();
@@ -182,7 +210,7 @@ vAddr allocateNewInt(){
 
 // Obtains the indicated memory page, from lower levels of the hierarchy if needed, and returns a pointer to the corresponding data (integer) in RAM.
 data * accessIntPtr(vAddr page){
-	printf("Accessing in t pointer.\n");
+	printf("\nAccessing int pointer.\n");
 	data_address RAM_address = table[page].addresses[RAM];
 	if (RAM_address != -1){
 		printf("\tPage to access was already in RAM.\n");
@@ -197,13 +225,13 @@ data * accessIntPtr(vAddr page){
 
 // Allows the user to indicate that the page can be swapped to disk, if needed, invalidating any previous pointers they had to the memory.
 void unlockMemory(vAddr page){
-	printf("Unlocking page %d.\n", page);
+	printf("\nUnlocking page %d.\n", page);
 	table[page].lock=False;
 }	
 
 // Frees the page and deletes any swapped out copies.
 void freeMemory(vAddr page){
-	printf("Freeing memory for page %d.\n",page);
+	printf("\nFreeing memory for page %d.\n",page);
 	// TODO: clear copies of page in other levels
 	for (Level l = 0;l<3;l++){
 		if (table[page].addresses[l] != -1){
@@ -219,6 +247,30 @@ void printPage(vAddr page_index){
 		page_index, table[page_index].allocated, table[page_index].addresses[0], table[page_index].addresses[1], table[page_index].addresses[2],table[page_index].timeAccessed);
 }
 
+void printMemoryBitmap(Level level){
+	printf("\tLevel %d:", level);
+	for (int i=0;i<memory_sizes[level];i++){
+		printf((memory_bitmaps[level][i]==True)?"1":"0");
+	}
+	printf("\n");
+}
+
+void printMemoryBitmaps(){
+	printf("MEMORY BITMAPS:\n");
+	for (int i=0;i<3;i++){
+		printMemoryBitmap(i);
+	}
+}
+
+void printPageTable(){
+	printf("\nPAGE TABLE:\n");
+	for (vAddr page =0;page<SIZE_PAGE_TABLE;page++){
+		if (table[page].allocated==True){
+			printf("\tP%3d L{%2d,%2d,%2d}\n", page, table[page].addresses[0], table[page].addresses[1], table[page].addresses[2]);
+		}
+	}
+}
+
 #define FOREVER 187.5 // forever, in seconds.
 // Stress test function, should take FOREVER
 // Allocate, access, update, unlock, and free memory
@@ -228,6 +280,10 @@ void memoryMaxer() {
 	vAddr indexes[SIZE_PAGE_TABLE];
 	vAddr index = 0;
 	for (index = 0; index < SIZE_PAGE_TABLE; ++index) {
+		printf("\n\n##################### INT %d ############################\n", index);
+		printMemoryBitmaps();
+		printPageTable();
+		
 		indexes[index] = allocateNewInt();
 		data *value = accessIntPtr(indexes[index]);
 		*value = (index * 3);
@@ -239,19 +295,24 @@ void memoryMaxer() {
 	}
 }
 
-// resets the given page struct (but does not clear the memory botmaps for it's data copies)
+// resets the given page struct (NOTE: does NOT clear the memory bitmaps for it's data copies)
 void reset_page(vAddr page){
 	table[page].lock = False;
 	table[page].allocated = False;
 	table[page].modified = False;
 	table[page].counter = 0; 
 	table[page].timeAccessed = 0;
+	
+	// delete all copies
+	for (Level l=0;l<3;l++){
+		table[page].addresses[l] = -1; 
+	}
 }
 
 // Initializes all array values to zero
 void init_arrays(){
 	
-	// Clear all memory bitmaps
+	// Clear all memory bitmaps initially
 	for (Level l = 0;l<3;l++){
 		for (vAddr i=0;i<memory_sizes[l];i++){
 			memory_bitmaps[l][i]=False;
