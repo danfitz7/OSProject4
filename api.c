@@ -34,8 +34,6 @@ void reset_page(vAddr page);
 boolean load_page_to_level(vAddr page,Level l);
 
 // simulated delay times
-
-
 program_time runTime = 0;
 program_time startTime = 0;
 void sleep_for_level_access(Level level){
@@ -43,10 +41,13 @@ void sleep_for_level_access(Level level){
 	runTime += memory_delay_times[level];
 	//sleep(memory_delay_times[level]);
 }
+program_time curTime = 0;
 program_time get_current_time(){
-	struct timeval curTime;
-	gettimeofday(&curTime, NULL);
-	return (curTime.tv_sec*1000 + curTime.tv_usec/1000) - startTime;
+	//struct timeval curTime;
+	//gettimeofday(&curTime, NULL);
+	//return (curTime.tv_sec*1000 + curTime.tv_usec/1000) - startTime;
+	curTime++;
+	return curTime;
 }
 
 // Returns a unallocated page from the table, or -1 if there are no unallocated pages.
@@ -232,7 +233,7 @@ vAddr allocateNewInt(){
 	
 	// Checks if memory is available (there was at-least one unallocated page)
 	if(page == -1){
-		printf("NO MEMORY: Returning -1...\n");
+		printf("ERROR: NO MEMORY: Returning -1...\n");
 		return -1;
 	}
 	
@@ -270,19 +271,28 @@ data * accessIntPtr(vAddr page){
 // Allows the user to indicate that the page can be swapped to disk, if needed, invalidating any previous pointers they had to the memory.
 void unlockMemory(vAddr page){
 	printf("\nUnlocking page %d.\n", page);
-	table[page].lock=False;
+	if (page>=SIZE_PAGE_TABLE || table[page].allocated==False){
+		printf("ERROR: trying to unlock non-existant or unallocated page %d.\n", page);
+	}else{
+		table[page].lock=False;
+	}
 }	
 
 // Frees the page and deletes any swapped out copies.
 void freeMemory(vAddr page){
 	printf("\nFreeing memory for page %d.\n",page);
-	// TODO: clear copies of page in other levels
-	for (Level l = 0;l<3;l++){
-		if (table[page].addresses[l] != -1){
-			memory_bitmaps[l][table[page].addresses[l]] = False; // clear memory for the copy in this level
+	
+	if (page>=SIZE_PAGE_TABLE || table[page].allocated==False){
+		printf("ERROR: trying to free non-existant or unallocated page %d.\n", page);
+	}else{
+		// TODO: clear copies of page in other levels
+		for (Level l = 0;l<3;l++){
+			if (table[page].addresses[l] != -1){
+				memory_bitmaps[l][table[page].addresses[l]] = False; // clear memory for the copy in this level
+			}
 		}
-	}
-	reset_page(page);												// reset page
+		reset_page(page);	// reset page
+	}		
 }	
 
 // Prints page info.
