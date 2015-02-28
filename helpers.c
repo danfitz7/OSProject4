@@ -15,7 +15,7 @@ typedef struct pageNode{
 pageNode *head; //??
 pageNode *tail; //??
 
-//Queue functions
+//Queue functions %title
 
 //Push an item to the end of the queue
 void enqueue(page *data){
@@ -69,8 +69,8 @@ void print_queue(){
 	}
 }*/
 
-//-----------------------------------------//
-//Delay the transfer
+/*//-----------------------------------------//
+//Delay the transfer %title
 	delay(int level){
 		if(level == RAM_LEVEL){
 			return;
@@ -211,30 +211,129 @@ void freeMemory(vAddr address){
 	page_to_free -> locked = 0;
 	page_to_free -> referenced = 0;
 	//TODO: find and delete swapped-out copies
-}
+}*/
 
 
 
 //----------------------------------------------//
-//For main.c
+//For main.c %title
+
+// Test that it will not make more than 1000 pages
+void exceed_memoryMaxer() {
+	printf("Exceeding Memory Maxer...\n");
+	int exceeding; 
+	exceeding = SIZE_PAGE_TABLE +1;
+	vAddr indexes[exceeding];
+	vAddr index = 0;
+	for (index = 0; index < exceeding; ++index) {
+		printf("\n\n##################### INT %d ############################\n", index);
+		printMemoryBitmaps();
+		printPageTable();
+		
+		indexes[index] = allocateNewInt();
+		data *value = accessIntPtr(indexes[index]);
+		*value = (index * 3);
+		unlockMemory(indexes[index]);
+	}
+
+	for (index = 0; index < exceeding; ++index) {
+		freeMemory(indexes[index]);
+	}
+}
+
+// Tests that it will not break if it cannot evict pages (as all are locked)
+void locked_MemoryMaxer() {
+	printf("Locked Memory Maxer...\n");
+	vAddr indexes[SIZE_PAGE_TABLE];
+	vAddr index = 0;
+	for (index = 0; index < SIZE_PAGE_TABLE; ++index) {
+		printf("\n\n##################### INT %d ############################\n", index);
+		printMemoryBitmaps();
+		printPageTable();
+		
+		indexes[index] = allocateNewInt();
+		data *value = accessIntPtr(indexes[index]);
+		*value = (index * 3);
+		//unlockMemory(indexes[index]);
+		printf("\n"); //Spacing in debug
+
+	}
+
+	for (index = 0; index < SIZE_PAGE_TABLE; ++index) {
+		freeMemory(indexes[index]);
+	}
+}
+
+//Repeatedly accessing a random memory page (50) to show the effect of LRU 
+void LRU_test() {
+	printf("LRU Test...\n");
+	int rand_page;
+	rand_page = 50;
+	vAddr indexes[SIZE_PAGE_TABLE];
+	vAddr index = 0;
+	for (index = 0; index < SIZE_PAGE_TABLE; ++index) {
+		printf("\n\n##################### INT %d ############################\n", index);
+		printMemoryBitmaps();
+		printPageTable();
+		
+		indexes[index] = allocateNewInt();
+		if(index > 100 && index%5 == 0){
+			accessIntPtr(rand_page);
+			printf("\n\tAccessing vAddr %d again\n", rand_page);
+		} //		printPageTable(); //??
+		unlockMemory(indexes[index]);
+	}
+
+	for (index = 0; index < SIZE_PAGE_TABLE; ++index) {
+		freeMemory(indexes[index]);
+	}
+}
+
+void proper_usage(){
+	printf("Please specify proper arguments. Correct format is ./api [eviction_algorithm][test_mode]\n");
+	// printf("[eviction_algorithm]: 0 => LRU; 1 => random\n"); 
+	// printf("[test_mode]: 0 => memoryMaxer; 1 => random_memoryMaxer\n"); 
+	exit(1);
+}
 
 //Run the actual memory management tool
 int main(int argc, char * argv[]){
+	int eviction_algorithm;
+	int test_mode;
+
 	srand(time(NULL));
-	if( argc != 2){
-		printf("Please specify proper arguments:\n\t0 - LRU \n\t1 - Clock\n");
-		exit(1);
+
+	if( argc != 3){
+		proper_usage();
 	}
 
-	algorithm = atoi( argv[1] );
-	if(algorithm != 0 && algorithm != 1){
-		printf("Please specify proper arguments:\n\t0 - LRU \n\t1 - Clock\n");
-		exit(1);
+	eviction_algorithm = atoi( argv[1] );
+	switch (eviction_algorithm){
+		case 0:
+			get_page_to_evict = &evict_LRU; // set the page eviction algorithm
+			break;
+		case 1:
+			get_page_to_evict = &evict_RANDOM; // set the page eviction algorithm
+			break;
+		default: 
+			printf("[eviction_algorithm]: 0 => LRU; 1 => random\n"); 
+			exit(1);
+			break;
 	}
 
-	init_arrays();
-	//memoryMaxer();
-}//NeedThis
-
+	test_mode = atoi( argv[2] );
+	switch (test_mode){
+		case 0:
+			memoryMaxer();
+			break;
+		case 1:
+			random_memoryMaxer();
+			break;
+		default: 
+			printf("[test_mode]: 0 => memoryMaxer; 1 => random_memoryMaxer\n"); 
+			exit(1);
+			break;
+	}
+}
 
 

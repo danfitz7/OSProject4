@@ -104,6 +104,41 @@ vAddr evict_LRU(Level level){
 	return min;
 }
 
+//second eviction algorithm - Randomly selected
+vAddr evict_random(Level level){
+
+	srand(time(NULL));
+
+	vAddr to_evict = -1;
+	int size = -1;
+
+	//determine level size
+	if (level == 0){
+		size = RAM_SIZE;
+	}
+	else if (level == 1){
+		size = SSD_SIZE;
+	}
+	else
+	{
+		printf("Invalid level or HDD selected. Cannot evict from HDD.\n");
+		return -1;
+	}
+
+	while(to_evict == -1)
+	{
+		//get random number between 0 and size-1.
+		vAddr r = rand() % (vAddr)size;
+		if (table[r].addresses[level] != -1 && table[r].lock == 0) //if the randomly selected page is there and not locked
+		{
+			to_evict = r;
+		}
+	}
+
+	return to_evict;
+
+}
+
 vAddr (*get_page_to_evict)(Level); // Pointer to the eviction function/algorithm to use
 
 // returns the physical address for the next unallocated space in the given level of memory, or -1 of that memory level is full
