@@ -33,6 +33,11 @@ void set_page(vAddr page, Level level, data_address address);
 void reset_page(vAddr page);
 void load_page_to_level(vAddr page,Level l);
 
+// simulated delay times
+void sleep_for_level_access(Level level){
+	printTabs(); printf("\t\tWaiting on memory device %d for %dus\n", level, memory_delay_times[level]);
+	//sleep(memory_delay_times[level]);
+}
 
 // helper funciton - returns the current time since the program started, in ms
 program_time startTime = 0;
@@ -98,10 +103,14 @@ data_address get_next_unallocated_pageframe_in_level(Level l){
 
 // copies the page data copy in one level to another
 void update_page_data(vAddr page, Level from, Level to){
-	printTabs(); printf("\t\t\tCopying page data for page %d from level %d to level %d.\n", page, from, to);
+	printTabs(); printf("\t\tCopying page data for page %d from level %d to level %d.\n", page, from, to);
 	if (table[page].addresses[to] <0 || table[page].addresses[from] <0){
 		printTabs(); printf("\nERROR: tried to update page data from address %d in level %d to %d in level %d.\n", table[page].addresses[from], from, table[page].addresses[to], to);
+	}else if (from == to){
+		printf("\nERROR: Copying page data to the same level %d.\n",from);
 	}else{
+		sleep_for_level_access(from);
+		sleep_for_level_access(to);
 		physical_memories[to][table[page].addresses[to]] = physical_memories[from][table[page].addresses[from]]; // copy data to a higher level.
 	}
 }
@@ -119,15 +128,21 @@ data_address evict_page_from_level(Level level_to_evict_from){
 		data_address evicted_address = table[page_to_evict].addresses[level_to_evict_from];	 // save the data address on this level of the page we're about to evict
 		
 		// Copy or update the page to the higher level, if it's not already there
-		if (table[page_to_evict].addresses[level_above] = -1){			 // if the page we're evicting has a copy in the higher level, then we don't need to copy it, we can just overwrite it
-			printTabs(); printf("\tPage has no copy in next higher level %d. Copying Page to that level...\n", level_above);
-			load_page_to_level(page_to_evict, level_above); 			 // copy the evicted page to the next memory level (recursively evicting pages from that level if needed)
+		if (table[page_to_evict].addresses[level_above] = -1){	// no copy in higher level		 
+			printTabs(); printf("\tPage has no copy in next higher level %d. Loading Page to that level...\n", level_above);
+			recursionLevel++;
+			load_page_to_level(page_to_evict, level_above); 			 		// copy the evicted page to the next memory level (recursively evicting pages from that level if needed)
+			printf("\n"); printTabs(); printf("\tCopying page data to newly loaded frame...\n");
+			update_page_data(page_to_evict, level_to_evict_from, level_above);	// copy the page frame
+			printTabs(); printf("\t...Page frame copied.\n\n");
+			recursionLevel--;
+		// if the page we're evicting has a copy in the higher level, then we don't need to copy it, we can just overwrite it
 		}else{
 			if (table[page_to_evict].modified == True){
 				printTabs(); printf("\tPage had a copy in the level above %d but was dirty. Updating higher level copy before overwriting this copy...\n", level_above);
 				update_page_data(page_to_evict, level_to_evict_from, level_above);
 			}else{
-				printTabs(); printf("\tPage had a copy in the level above %d but was not dirtyOverwriting this copy...\n", level_above);
+				printTabs(); printf("\tPage had a copy in the level above %d but was not dirty. Overwriting this copy...\n", level_above);
 			}
 		}
 		
@@ -150,7 +165,7 @@ void set_page(vAddr page, Level level, data_address address){
 	table[page].addresses[level] = address;	// record where in that level the data is being stored
 	
 	// search for higher-level copies to copy data from
-	for (Level l = 1;l<level;l++){
+	for (Level l = level+1;l<3;l++){
 		if (table[page].addresses[l] != -1){	// if we found a copy of this page in some higher level of memory
 			printTabs(); printf("\t\tCopying data from higher level %d.\n", l);
 			update_page_data(page, level, l);	// copy from that level.
@@ -215,11 +230,16 @@ vAddr allocateNewInt(){
 data * accessIntPtr(vAddr page){
 	printf("\nAccessing int pointer.\n");
 	data_address RAM_address = table[page].addresses[RAM];
+	table[page].modified = True; // Assume the user will change the data with the pointer we're about to give them
+	
+	// if the page is already in RAM, just given them the RAM pointer
 	if (RAM_address != -1){
 		printf("\tPage to access was already in RAM.\n");
 		return &(ram[RAM_address]);
+	
+	// if the page is not in RAM, we've hit a page fault. Load it to RAM, evicitng other pages if need be.
 	}else{
-		printf("\tNeed to laod page to access into RAM\n");
+		printf("\tPage fault! Loading requested page to ram!\n");
 		// Need to bring the page into ram
 		load_page_to_level(page, RAM);
 		return &(ram[table[page].addresses[RAM]]);
