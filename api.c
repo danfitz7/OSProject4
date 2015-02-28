@@ -68,17 +68,32 @@ vAddr evict_Random(Level level){
 	printTabs(); printf("\tChoosing a random page to evict...\n");
 	//TODO: check if there's even anything to evict (ram not full of locked)
 	
-	/*
-	vAddr random_page_to_evict = rand()%SIZE_PAGE_TABLE;
-	while(table[random_page_to_evict].allocated == True && table[random_page_to_evict].addresses[level] != -1){ // find a random page that is allocated and has a copy on this level or memory
-		if (level != RAM || table[random_page_to_evict].lock == False){ // make sure it's not locked in RAM (note short circuit logic)
-			random_page_to_evict = rand()%SIZE_PAGE_TABLE;
+	// Possibility check
+	if (level==RAM){
+		boolean at_least_one_unlocked_RAM = False;
+		for (vAddr i=0;i<SIZE_PAGE_TABLE;i++){
+			if (table[i].allocated && table[i].addresses[RAM] != -1 && table[i].lock==False){
+				at_least_one_unlocked_RAM = True;
+			}
 		}
+		if (at_least_one_unlocked_RAM = False){
+			printf("ERROR: Random eviction from RAM failed because all pages in RAM are locked!\n");
+			return -1;
+		}
+	}
+	
+	// Standard choose-random-something-works algorithm
+	vAddr random_page_to_evict;
+	// find a random page that is allocated and has a copy on this level of memory (and this level is either not RAM or is RAM but the page is not locked in RAM)
+	while(1){
+		random_page_to_evict = rand()%SIZE_PAGE_TABLE;
+		if (table[random_page_to_evict].allocated == True && table[random_page_to_evict].addresses[level] != -1 && !(level == RAM && table[random_page_to_evict].lock == True)){
+			break;
+		}
+		//printf("Random page %d won't work: allocated=%d, address[%d]=%3d, lock=%d\n", random_page_to_evict, table[random_page_to_evict].allocated, level, table[random_page_to_evict].addresses[level], table[random_page_to_evict].lock);
 	}
 	printTabs(); printf("\t...randomly evicting page %d from level %d.\n", random_page_to_evict, level);
 	return random_page_to_evict;
-	*/
-	return -1;
 }
 
 // First eviction algorithm - Least Recently Used (LRU)
@@ -270,22 +285,24 @@ boolean load_page_to_level(vAddr page,Level level){ // loads the given page to t
 	
 	data_address address = get_next_unallocated_pageframe_in_level(level); // gets free memory space at the given memory level
 	if (address == -1){						// if this memory level is full
-		recursionLevel--;
-		printTabs(); printf("\t\tNo free memory in level %d found. Evicting a page...\n", level);
-		recursionLevel+=2;
+
+		printTabs(); printf("\tNo free memory in level %d found. Evicting a page...\n", level);
 		
+		recursionLevel++;
 		address = evict_page_from_level(level);	// evict a page using the page eviction algorithm and use the memory it was taking.
-		
+		recursionLevel--;
+
 		if (address <0){
 			printf("ERROR: Could not find a page to evict on the level %d to load a page there!\n", level);
+			recursionLevel--;
 			return False;
 		}
 		
-		recursionLevel--;
 		
 		// No page could be evicted for some reason
 		if (address == -1){
 			printf("WARNING: No page could be evicted from memory level %d to load page %d.\n", level, page);
+			recursionLevel--;
 			return False;
 		}
 
@@ -313,10 +330,12 @@ vAddr allocateNewInt(){
 		return -1;
 	}
 	
-	load_page_to_level(page, RAM);
+	// Check that we successfully loaded a page on RAM
+	if (!load_page_to_level(page, RAM)){
+		printf("ERROR: Could not load page to RAM while allocating int - RAM must be full of locket pages.\n");
+		return -1;
+	}
 	
-//	table[page].lock=True;
-
 	printf("...New int Allocated.\n");
 	return page;
 }
@@ -461,6 +480,6 @@ void init_arrays(){
 //Run the actual memory management tool
 int main(){
 	init_arrays();			// setup
-	get_page_to_evict = &evict_LRU; // set the page eviction algorithm
+	get_page_to_evict = &evict_Random; // set the page eviction algorithm
 	memoryMaxer();			// test
 }
