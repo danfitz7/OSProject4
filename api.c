@@ -103,6 +103,12 @@ data_address get_next_unallocated_pageframe_in_level(Level l){
 	return -1;
 }
 
+// if we're swapping between two devices, we can issue commands to both in (nearly) the same time and end up waiting for the longer one.
+void sleep_for_swap(Level a, Level b){
+	Level longer_level = (memory_delay_times[a]>=memory_delay_times[b])?a :b;
+	sleep_for_level_access(longer_level);
+}
+
 // copies the page data copy in one level to another
 void update_page_data(vAddr page, Level from, Level to){
 	printTabs(); printf("\t\tCopying page data for page %d from level %d to level %d.\n", page, from, to);
@@ -111,8 +117,7 @@ void update_page_data(vAddr page, Level from, Level to){
 	}else if (from == to){
 		printf("\nERROR: Copying page data to the same level %d.\n",from);
 	}else{
-		sleep_for_level_access(from);
-		sleep_for_level_access(to);
+		sleep_for_swap(from, to);
 		physical_memories[to][table[page].addresses[to]] = physical_memories[from][table[page].addresses[from]]; // copy data to a higher level.
 	}
 }
