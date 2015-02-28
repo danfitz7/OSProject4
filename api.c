@@ -181,51 +181,58 @@ void update_page_data(vAddr page, Level from, Level to){
 
 // Helper function to evict the given page from the given memory level (recursive on memory levels.)
 data_address evict_page_from_level(Level level_to_evict_from){
-	Level level_above = level_to_evict_from + 1;
-	if (level_above == NONE){
-		printTabs(); printf("ERROR: Cannot evict from hard drive!\n");
-	}else{
-		vAddr page_to_evict = (*get_page_to_evict)(level_to_evict_from); // get the page to evict from the given memory level using the current page eviction algorithm
-		
-		// Check that we were able to find something to evict
-		if (page_to_evict <0){
-			printf("ERROR: Could not find any page on level %d to evict!\n", level_to_evict_from);
-			return -1;
-		}
-		
-		printTabs(); printf("\tEvicting page %d from level %d.\n", page_to_evict, level_to_evict_from);
-		
-		// get the address of the data on this level
-		data_address evicted_address = table[page_to_evict].addresses[level_to_evict_from];	 // save the data address on this level of the page we're about to evict
-		
-		// Copy or update the page to the higher level, if it's not already there
-		if (table[page_to_evict].addresses[level_above] = -1){	// no copy in higher level		 
-			recursionLevel++;
-			printTabs(); printf("\tPage has no copy in next higher level %d. Loading Page to that level...\n", level_above);
-			load_page_to_level(page_to_evict, level_above); 			 		// copy the evicted page to the next memory level (recursively evicting pages from that level if needed)
-			printTabs(); printf("\tCopying page data to newly loaded frame...\n");
-			update_page_data(page_to_evict, level_to_evict_from, level_above);	// copy the page frame
-			printTabs(); printf("\t...Page frame copied.\n\n");
-			recursionLevel--;
-		// if the page we're evicting has a copy in the higher level, then we don't need to copy it, we can just overwrite it
-		}else{
-			if (table[page_to_evict].modified == True){
-				printTabs(); printf("\tPage had a copy in the level above %d but was dirty. Updating higher level copy before overwriting this copy...\n", level_above);
-				update_page_data(page_to_evict, level_to_evict_from, level_above);
-			}else{
-				printTabs(); printf("\tPage had a copy in the level above %d but was not dirty. Overwriting this copy...\n", level_above);
-			}
-		}
-		
-		// Clear this table from this level
-		table[page_to_evict].addresses[level_to_evict_from] = -1;  	 // Delete this table's reference to the data on this memory level (data will be overwritten when a new page is put in)
-		memory_bitmaps[level_to_evict_from][evicted_address] = False; // Clear the memory bitmap for the memory we just evicted to a highewr level.
-		
-		printTabs(); printf("\t...evicted page %d using address %d from level %d.\n\n", page_to_evict, evicted_address, level_to_evict_from);
-
-		return evicted_address;
+	
+	// Check the level we're evicting from
+	if (level_to_evict_from <0 || level_to_evict_from >=HDD){
+		printf("ERROR: Cannot evict from level %d.\n", level_to_evict_from);
+		return -1;
 	}
-	printTabs(); printf("\t...evicted page from level %d.\n", level_to_evict_from);
+	
+	// check the level we're evicting to
+	Level level_above = level_to_evict_from + 1;
+	if (level_above > HDD){
+		printTabs(); printf("ERROR: Cannot evict past hard drive!\n");
+		return -1;
+	}
+	
+	vAddr page_to_evict = (*get_page_to_evict)(level_to_evict_from); // get the page to evict from the given memory level using the current page eviction algorithm
+	
+	// Check that we were able to find something to evict
+	if (page_to_evict <0){
+		printf("ERROR: Could not find any page on level %d to evict!\n", level_to_evict_from);
+		return -1;
+	}
+	
+	printTabs(); printf("\tEvicting page %d from level %d.\n", page_to_evict, level_to_evict_from);
+	
+	// get the address of the data on this level
+	data_address evicted_address = table[page_to_evict].addresses[level_to_evict_from];	 // save the data address on this level of the page we're about to evict
+	
+	// Copy or update the page to the higher level, if it's not already there
+	if (table[page_to_evict].addresses[level_above] = -1){	// no copy in higher level		 
+		recursionLevel++;
+		printTabs(); printf("\tPage has no copy in next higher level %d. Loading Page to that level...\n", level_above);
+		load_page_to_level(page_to_evict, level_above); 			 		// copy the evicted page to the next memory level (recursively evicting pages from that level if needed)
+		printTabs(); printf("\tCopying page data to newly loaded frame...\n");
+		update_page_data(page_to_evict, level_to_evict_from, level_above);	// copy the page frame
+		printTabs(); printf("\t...Page frame copied.\n\n");
+		recursionLevel--;
+	// if the page we're evicting has a copy in the higher level, then we don't need to copy it, we can just overwrite it
+	}else{
+		if (table[page_to_evict].modified == True){
+			printTabs(); printf("\tPage had a copy in the level above %d but was dirty. Updating higher level copy before overwriting this copy...\n", level_above);
+			update_page_data(page_to_evict, level_to_evict_from, level_above);
+		}else{
+			printTabs(); printf("\tPage had a copy in the level above %d but was not dirty. Overwriting this copy...\n", level_above);
+		}
+	}
+	
+	// Clear this table from this level
+	table[page_to_evict].addresses[level_to_evict_from] = -1;  	 // Delete this table's reference to the data on this memory level (data will be overwritten when a new page is put in)
+	memory_bitmaps[level_to_evict_from][evicted_address] = False; // Clear the memory bitmap for the memory we just evicted to a highewr level.
+	
+	printTabs(); printf("\t...evicted page %d using address %d from level %d.\n\n", page_to_evict, evicted_address, level_to_evict_from);
+	return evicted_address;
 }
 
 // Sets the given page to the given physical address for the given level
@@ -454,6 +461,6 @@ void init_arrays(){
 //Run the actual memory management tool
 int main(){
 	init_arrays();			// setup
-	get_page_to_evict = &evict_Random;//&evict_LRU; // set the page eviction algorithm
+	get_page_to_evict = &evict_LRU; // set the page eviction algorithm
 	memoryMaxer();			// test
 }
