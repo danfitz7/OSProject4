@@ -1,4 +1,5 @@
 // API.c - defines user functions for accessing memory 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <semaphore.h> 
@@ -84,12 +85,18 @@ vAddr evict_Random(Level level){
 	
 	// Standard choose-random-something-works algorithm
 	vAddr random_page_to_evict;
-	// find a random page that is allocated and has a copy on this level of memory (and this level is either not RAM or is RAM but the page is not locked in RAM)
 	while(1){
+		// find a random page that is allocated and has a copy on this level of memory (and this level is either not RAM or is RAM but the page is not locked in RAM)
 		random_page_to_evict = rand()%SIZE_PAGE_TABLE;
+		
+		pthread_mutex_lock(&(table[random_page_to_evict].mutex)); // lock the page mutex before messing with anything (so no one messes with us while we're doing anything)
+		
 		if (table[random_page_to_evict].allocated == True && table[random_page_to_evict].addresses[level] != -1 && !(level == RAM && table[random_page_to_evict].lock == True)){
 			break;
 		}
+		
+		pthread_mutex_unlock(&(table[random_page_to_evict].mutex)); // if we got here then the page was useless, let it go. Fly away little page! Fly away!
+
 		//printf("Random page %d won't work: allocated=%d, address[%d]=%3d, lock=%d\n", random_page_to_evict, table[random_page_to_evict].allocated, level, table[random_page_to_evict].addresses[level], table[random_page_to_evict].lock);
 	}
 	printTabs(); printf("\t...randomly evicting page %d from level %d.\n", random_page_to_evict, level);
@@ -102,13 +109,23 @@ vAddr evict_LRU(Level level){
 	printTabs(); printf("\tFinding the Least Recently Used Page to evict...\n");
 	//finds page with LRU access
 	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){	// Loop through page table
+		
+		// before doing anything, lock the page and it's memory locations.
+		pthread_mutex_lock(&(table[i].mutex));
+		
 		if(table[i].allocated==True && table[i].addresses[level] != -1 && !(level==RAM && table[i].lock == True)){	// if the page is allocated and is in the given level memory and is unlocked if that level is RAM
 			if(min == -1){	// if min hasn't been set yet (note we have to use min as an index for the comparison below, so the comparison will crash without this initial set condition)
 				min = i;
+			
+				// note we keep the mutex locked
 			}else{
 				// compare to the previous min
 				if(table[i].timeAccessed < table[min].timeAccessed){
+					pthread_mutex_lock(&(table[min].mutex));	// unlock the old min page (NOTE the current min is always locked)
+
 					min = i;
+				}else{
+					pthread_mutex_unlock(&(table[i].mutex)); // if we didn't replace min, this page is useless, let it go.
 				}
 			}
 		}
@@ -160,28 +177,33 @@ vAddr evict_random(Level level){
 }
 */
 
+// NOTE: if a page eviction algorithm returns a valid vAddr, it is expected that the corresponding page's mutex is locked upon return so the calling thread doesn't have to worry about anyone messing with the page they just got.
 vAddr (*get_page_to_evict)(Level); // Pointer to the eviction function/algorithm to use
 
 // returns the physical address for the next unallocated space in the given level of memory, or -1 of that memory level is full
 data_address get_next_unallocated_pageframe_in_level(Level l){
 	printTabs(); printf("\tGetting next unallocated memory in level %d...\n", l);
 	for(vAddr i=0; i<memory_sizes[l]; i++){
+		
 		if(memory_bitmaps[l][i] == False){
 			printTabs(); printf("\t...memory %d is free in level %d.\n\n", i, l);
-			return i;
+			return i; // Note we don't lock the mutex before returning. Whatever called us should expect the returned memory to be mutex-locked and unlock it when done.
 		}
+		
 	}
 	printTabs(); printf("\t...no unallocated memory found in level %d.\n\n", l);
 	return -1;
 }
 
 // if we're swapping between two devices, we can issue commands to both in (nearly) the same time and end up waiting for the longer one.
+// Deemed threadsafe because it's called from threadsafe functions
 void sleep_for_swap(Level a, Level b){
 	Level longer_level = (memory_delay_times[a]>=memory_delay_times[b])?a :b;
 	sleep_for_level_access(longer_level);
 }
 
 // copies the page data copy in one level to another
+// Deemed threadsafe because it's called in two threadsafe functions (evict_page_from_level() and set_page()) on a locked page
 void update_page_data(vAddr page, Level from, Level to){
 	printTabs(); printf("\t\tCopying page data for page %d from level %d to level %d.\n", page, from, to);
 	if (table[page].addresses[to] <0 || table[page].addresses[from] <0){
@@ -195,6 +217,7 @@ void update_page_data(vAddr page, Level from, Level to){
 }
 
 // Helper function to evict the given page from the given memory level (recursive on memory levels.)
+// Deemed threadsafe because it locks the mutex of the page it's evicting it while it checks or does anything with it.
 data_address evict_page_from_level(Level level_to_evict_from){
 	
 	// Check the level we're evicting from
@@ -210,6 +233,7 @@ data_address evict_page_from_level(Level level_to_evict_from){
 		return -1;
 	}
 	
+	// Note that if page_to_evict is a valid vAddr, the corresponding mutex will be locked upon return.
 	vAddr page_to_evict = (*get_page_to_evict)(level_to_evict_from); // get the page to evict from the given memory level using the current page eviction algorithm
 	
 	// Check that we were able to find something to evict
@@ -246,11 +270,15 @@ data_address evict_page_from_level(Level level_to_evict_from){
 	table[page_to_evict].addresses[level_to_evict_from] = -1;  	 // Delete this table's reference to the data on this memory level (data will be overwritten when a new page is put in)
 	memory_bitmaps[level_to_evict_from][evicted_address] = False; // Clear the memory bitmap for the memory we just evicted to a highewr level.
 	
+	// finally mutex unlock the page we just evicted
+	pthread_mutex_unlock(&(table[page_to_evict].mutex));
+	
 	printTabs(); printf("\t...evicted page %d using address %d from level %d.\n\n", page_to_evict, evicted_address, level_to_evict_from);
 	return evicted_address;
 }
 
 // Sets the given page to the given physical address for the given level
+// Deemed threadsafe because it's only called within load_page_to_level() on a mutex-locked thread
 void set_page(vAddr page, Level level, data_address address){	
 	printTabs(); printf("\tSetting page %d in level %d with address %d...\n", page, level, address);
 	
@@ -298,7 +326,6 @@ boolean load_page_to_level(vAddr page,Level level){ // loads the given page to t
 			return False;
 		}
 		
-		
 		// No page could be evicted for some reason
 		if (address == -1){
 			printf("WARNING: No page could be evicted from memory level %d to load page %d.\n", level, page);
@@ -307,7 +334,11 @@ boolean load_page_to_level(vAddr page,Level level){ // loads the given page to t
 		}
 
 	}
+		
 	set_page(page, level, address);			// set the page to use this memory at this level.
+	
+	// mutex unlock the page we're loading
+	pthread_mutex_unlock(&table[page].mutex);
 	
 	recursionLevel--;
 	printTabs(); printf("\t...Loaded page %d to level %d.\n\n", page, level);
@@ -343,6 +374,9 @@ vAddr allocateNewInt(){
 // Obtains the indicated memory page, from lower levels of the hierarchy if needed, and returns a pointer to the corresponding data (integer) in RAM.
 data * accessIntPtr(vAddr page){
 	printf("\nAccessing int pointer.\n");
+	
+	pthread_mutex_lock(&table[page].mutex);
+	
 	data_address RAM_address = table[page].addresses[RAM];
 	table[page].modified = True; // Assume the user will change the data with the pointer we're about to give them
 	table[page].lock = True;
@@ -361,6 +395,8 @@ data * accessIntPtr(vAddr page){
 			return NULL;
 		}
 	}
+	
+	pthread_mutex_unlock(&table[page].mutex);
 }
 
 // Allows the user to indicate that the page can be swapped to disk, if needed, invalidating any previous pointers they had to the memory.
@@ -369,7 +405,9 @@ void unlockMemory(vAddr page){
 	if (page>=SIZE_PAGE_TABLE || table[page].allocated==False){
 		printf("ERROR: trying to unlock non-existant or unallocated page %d.\n", page);
 	}else{
+		pthread_mutex_lock(&table[page].mutex);
 		table[page].lock=False;
+		pthread_mutex_unlock(&table[page].mutex);
 	}
 }	
 
@@ -381,12 +419,14 @@ void freeMemory(vAddr page){
 		printf("ERROR: trying to free non-existant or unallocated page %d.\n", page);
 	}else{
 		// TODO: clear copies of page in other levels
+		pthread_mutex_lock(&table[page].mutex);
 		for (Level l = 0;l<3;l++){
 			if (table[page].addresses[l] != -1){
 				memory_bitmaps[l][table[page].addresses[l]] = False; // clear memory for the copy in this level
 			}
 		}
 		reset_page(page);	// reset page
+		pthread_mutex_unlock(&table[page].mutex);
 	}		
 }	
 
@@ -415,7 +455,7 @@ void printPageTable(){
 	printf("\nPAGE TABLE:\n");
 	for (vAddr page =0;page<SIZE_PAGE_TABLE;page++){
 		if (table[page].allocated==True){
-			printf("\tP %3d L{%2d,%2d,%2d} T %lu\n", page, table[page].addresses[0], table[page].addresses[1], table[page].addresses[2], table[page].timeAccessed);
+			printf("\tP %3d L{%2d,%2d,%3d} T %lu\n", page, table[page].addresses[0], table[page].addresses[1], table[page].addresses[2], table[page].timeAccessed);
 		}
 	}
 }

@@ -3,8 +3,10 @@
 #ifndef _API_H_
 #define _API_H_
 
+// includes
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 //define memory sizes
 #define RAM_SIZE 25
@@ -56,6 +58,9 @@ typedef struct{
 	boolean lock;			// locked for current user
 	int counter;			// for LRU, increments with every memory access
 	program_time timeAccessed; // records last time page was accessed
+	
+	// synchronization primitives
+	pthread_mutex_t mutex;
 } Page;
 Page table[SIZE_PAGE_TABLE]; // Page table
 
@@ -64,6 +69,14 @@ boolean ram_bitmap[RAM_SIZE];
 boolean ssd_bitmap[SSD_SIZE];
 boolean hdd_bitmap[HDD_SIZE];
 boolean* memory_bitmaps[] = {ram_bitmap, ssd_bitmap, hdd_bitmap};
+
+/*
+// mutexes for physical memory
+pthread_mutex_t ram_bitmap_mutexes[RAM_SIZE];
+pthread_mutex_t ssd_bitmap_mutexes[SSD_SIZE];
+pthread_mutex_t hdd_bitmap_mutexes[HDD_SIZE];
+pthread_mutex_t* memory_bitmap_mutexes = {ram_bitmap_mutexes, ssd_bitmap_mutexes, hdd_bitmap_mutexes};
+*/
 
 // Memory arrays (emulating actual storage devices)
 data ram[RAM_SIZE];
