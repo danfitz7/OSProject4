@@ -63,19 +63,28 @@ vAddr get_unallocated_page(){
 // When a page fault occurs, but there is no place to store the faulted page, a page is evicted a page to make room.
 // A locked page cannot be evicted.
 // Two different eviction algorithms may be used to choose an unlocked page to evict
-vAddr evict_Clock(Level level){
-	// TODO
-	return -1;
+vAddr evict_Random(Level level){
+	printTabs(); printf("\tChoosing a random page to evict...\n");
+	//TODO: check if there's even anything to evict (ram not full of locked)
+	
+	vAddr random_page_to_evict = rand()%SIZE_PAGE_TABLE;
+	while(table[random_page_to_evict].allocated == True && table[random_page_to_evict].addresses[level] != -1){ // find a random page that is allocated and has a copy on this level or memory
+		if (level != RAM || table[random_page_to_evict].lock == False){ // make sure it's not locked in RAM (note short circuit logic)
+			random_page_to_evict = rand()%SIZE_PAGE_TABLE;
+		}
+	}
+	printTabs(); printf("\t...randomly evicting page %d from level %d.\n", random_page_to_evict, level);
+	return random_page_to_evict;
 }
 
 // First eviction algorithm - Least Recently Used (LRU)
 vAddr evict_LRU(Level level){
 	vAddr min = -1;
-	
+	printTabs(); printf("\tFinding the Least Recently Used Page to evict...\n");
 	//finds page with LRU access
-	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){
-		if(table[i].addresses[level] != -1 && !(level==RAM && table[i].lock == True)){	// if the table is in the given level and is unlocked if the given level is RAM
-			if(min == -1){	// if min hasn't been set yet
+	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){	// Loop through page table
+		if(table[i].allocated==True && table[i].addresses[level] != -1 && !(level==RAM && table[i].lock == True)){	// if the page is allocated and is in the given level memory and is unlocked if that level is RAM
+			if(min == -1){	// if min hasn't been set yet (note we have to use min as an index for the comparison below, so the comparison will crash without this initial set condition)
 				min = i;
 			}else{
 				// compare to the previous min
@@ -85,7 +94,13 @@ vAddr evict_LRU(Level level){
 			}
 		}
 	}
-
+	
+	if (min ==-1){
+		printf("ERROR: LRU could not find a page to evict on level %d!\n", min);
+	}else{
+		printTabs(); printf("\t...LRU page on this level %d is page %d.\n", level, min);
+	}
+	
 	return min;
 }
 
@@ -130,6 +145,13 @@ data_address evict_page_from_level(Level level_to_evict_from){
 		printTabs(); printf("ERROR: Cannot evict from hard drive!\n");
 	}else{
 		vAddr page_to_evict = (*get_page_to_evict)(level_to_evict_from); // get the page to evict from the given memory level using the current page eviction algorithm
+		
+		// Check that we were able to find something to evict
+		if (page_to_evict <0){
+			printf("ERROR: Could not find any page on level %d to evict!\n", level_to_evict_from);
+			return -1;
+		}
+		
 		printTabs(); printf("\tEvicting page %d from level %d.\n", page_to_evict, level_to_evict_from);
 		
 		// get the address of the data on this level
@@ -205,6 +227,12 @@ boolean load_page_to_level(vAddr page,Level level){ // loads the given page to t
 		recursionLevel+=2;
 		
 		address = evict_page_from_level(level);	// evict a page using the page eviction algorithm and use the memory it was taking.
+		
+		if (address <0){
+			printf("ERROR: Could not find a page to evict on the level %d to load a page there!\n", level);
+			return False;
+		}
+		
 		recursionLevel--;
 		
 		// No page could be evicted for some reason
