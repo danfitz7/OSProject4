@@ -19,6 +19,7 @@ unsigned int memory_sizes[] = {RAM_SIZE, SSD_SIZE, HDD_SIZE};
 #define SSD_SLEEP 250000 		//0.25s
 #define HDD_SLEEP 2500000		//2.5s
 unsigned int memory_delay_times[] = {RAM_SLEEP, SSD_SLEEP, HDD_SLEEP};
+#define FOREVER 187500000// 187.5 // forever, in seconds.
 
 // Helps to have Booleans
 #define boolean unsigned short

@@ -34,13 +34,15 @@ void reset_page(vAddr page);
 boolean load_page_to_level(vAddr page,Level l);
 
 // simulated delay times
+
+
+program_time runTime = 0;
+program_time startTime = 0;
 void sleep_for_level_access(Level level){
 	printTabs(); printf("\t\tWaiting on memory device %d for %dus\n", level, memory_delay_times[level]);
+	runTime += memory_delay_times[level];
 	//sleep(memory_delay_times[level]);
 }
-
-// helper funciton - returns the current time since the program started, in ms
-program_time startTime = 0;
 program_time get_current_time(){
 	struct timeval curTime;
 	gettimeofday(&curTime, NULL);
@@ -308,7 +310,6 @@ void printPageTable(){
 	}
 }
 
-#define FOREVER 187.5 // forever, in seconds.
 // Stress test function, should take FOREVER
 // Allocate, access, update, unlock, and free memory
 // While calling allocateNewInt, needs to swap old pages to secondary memory
@@ -317,7 +318,7 @@ void memoryMaxer() {
 	vAddr indexes[SIZE_PAGE_TABLE];
 	vAddr index = 0;
 	for (index = 0; index < SIZE_PAGE_TABLE; ++index) {
-		printf("\n\n##################### INT %d ############################\n", index);
+		printf("\n\n##################### INT %d Runtime %lu ############################\n", index, runTime);
 		printMemoryBitmaps();
 		printPageTable();
 		
@@ -330,6 +331,8 @@ void memoryMaxer() {
 	for (index = 0; index < SIZE_PAGE_TABLE; ++index) {
 		freeMemory(indexes[index]);
 	}
+	
+	printf("\n\nTotal runtime: %lu which %s forever.", runTime, (runTime==FOREVER)?"is":"is not");
 }
 
 // resets the given page struct (NOTE: does NOT clear the memory bitmaps for it's data copies)
