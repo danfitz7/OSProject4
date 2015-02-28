@@ -1,0 +1,16 @@
+TESTING FUNCTIONS:
+
+//memoryMaxer():
+This function is provided in the project specs. It loads 1000 pages into memory, indexing through the page table and return the address of the newly allocated data in memory. After going through
+each entry, it unlocks the memory spot of the entry, then frees the entry.
+
+//LRU_test
+repeat_test() is a test that accesses virtual address 50 every 5 indexes after 100. This 
+was implemented to show that with LRU, pages that are accessed frequently stay in the faster
+levels of the memory hierarchy.
+
+//exceed_memoryMaxer()
+Similar to memoryMaxer() but instead created one more page than possible in the system. The API should denies the 1001th page and returns an error.
+
+//locked_memoryMaxer()
+Similar to memoryMaxer() but address pages were never unlocked after creation. so that RAM would fill up but never be able to evict something (since all pages are locked). Our program prints an error message and prevents the handler from evicting locked pages- in the case of our test, the RAM fills up, but no other addresses are created as there is no way to evict any of the locked addresses in RAM. The program terminates normally in this condition.
