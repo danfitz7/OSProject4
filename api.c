@@ -31,7 +31,7 @@ data_address get_next_unallocated_pageframe_in_level(Level l);
 data_address evict_page_from_level(Level level_to_evict_from);
 void set_page(vAddr page, Level level, data_address address);
 void reset_page(vAddr page);
-void load_page_to_level(vAddr page,Level l);
+boolean load_page_to_level(vAddr page,Level l);
 
 // simulated delay times
 void sleep_for_level_access(Level level){
@@ -71,7 +71,7 @@ vAddr evict_LRU(Level level){
 	
 	//finds page with LRU access
 	for(vAddr i=0; i<SIZE_PAGE_TABLE; i++){
-		if(table[i].addresses[level] != -1 && table[i].lock == 0){	// if the table is in the given level and is unlocked
+		if(table[i].addresses[level] != -1 && !(level==RAM && table[i].lock == True)){	// if the table is in the given level and is unlocked if the given level is RAM
 			if(min == -1){	// if min hasn't been set yet
 				min = i;
 			}else{
@@ -186,7 +186,7 @@ void set_page(vAddr page, Level level, data_address address){
 // it is then transferred from the SSD into main memory.
 // The page fault handler must evict pages to make room when swapping in.
 // The page fault handler is responsible for inserting the appropriate delays based on the memory type.
-void load_page_to_level(vAddr page,Level level){ // loads the given page to the given memory level, evicting pages from that level to higher levels to make space if needed (recursive)
+boolean load_page_to_level(vAddr page,Level level){ // loads the given page to the given memory level, evicting pages from that level to higher levels to make space if needed (recursive)
 	printf("\n"); printTabs(); printf("\tLoading page %d to level %d...\n", page, level);
 	recursionLevel++;
 	
@@ -198,11 +198,19 @@ void load_page_to_level(vAddr page,Level level){ // loads the given page to the 
 		
 		address = evict_page_from_level(level);	// evict a page using the page eviction algorithm and use the memory it was taking.
 		recursionLevel--;
+		
+		// No page could be evicted for some reason
+		if (address == -1){
+			printf("WARNING: No page could be evicted from memory level %d to load page %d.\n", level, page);
+			return False;
+		}
+
 	}
 	set_page(page, level, address);			// set the page to use this memory at this level.
 	
 	recursionLevel--;
 	printTabs(); printf("\t...Loaded page %d to level %d.\n\n", page, level);
+	return True;
 }
 
 // Reserves memory location, sizeof(int)
@@ -234,7 +242,7 @@ data * accessIntPtr(vAddr page){
 	printf("\nAccessing int pointer.\n");
 	data_address RAM_address = table[page].addresses[RAM];
 	table[page].modified = True; // Assume the user will change the data with the pointer we're about to give them
-	
+	table[page].lock = True;
 	// if the page is already in RAM, just given them the RAM pointer
 	if (RAM_address != -1){
 		printf("\tPage to access was already in RAM.\n");
@@ -244,8 +252,11 @@ data * accessIntPtr(vAddr page){
 	}else{
 		printf("\tPage fault! Loading requested page to ram!\n");
 		// Need to bring the page into ram
-		load_page_to_level(page, RAM);
-		return &(ram[table[page].addresses[RAM]]);
+		if (load_page_to_level(page, RAM)){
+			return &(ram[table[page].addresses[RAM]]);
+		}else{
+			return NULL;
+		}
 	}
 }
 
