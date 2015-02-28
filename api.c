@@ -24,7 +24,7 @@ void printPage(vAddr page_index);
 
 // Different page eviction algorithms
 vAddr evict_LRU(Level level);
-vAddr evict_Clock(Level level);
+vAddr evict_Random(Level level);
 
 // Eviction and swapping helper functions
 data_address get_next_unallocated_pageframe_in_level(Level l);
@@ -64,9 +64,11 @@ vAddr get_unallocated_page(){
 // A locked page cannot be evicted.
 // Two different eviction algorithms may be used to choose an unlocked page to evict
 vAddr evict_Random(Level level){
+	
 	printTabs(); printf("\tChoosing a random page to evict...\n");
 	//TODO: check if there's even anything to evict (ram not full of locked)
 	
+	/*
 	vAddr random_page_to_evict = rand()%SIZE_PAGE_TABLE;
 	while(table[random_page_to_evict].allocated == True && table[random_page_to_evict].addresses[level] != -1){ // find a random page that is allocated and has a copy on this level or memory
 		if (level != RAM || table[random_page_to_evict].lock == False){ // make sure it's not locked in RAM (note short circuit logic)
@@ -75,6 +77,8 @@ vAddr evict_Random(Level level){
 	}
 	printTabs(); printf("\t...randomly evicting page %d from level %d.\n", random_page_to_evict, level);
 	return random_page_to_evict;
+	*/
+	return -1;
 }
 
 // First eviction algorithm - Least Recently Used (LRU)
@@ -104,6 +108,7 @@ vAddr evict_LRU(Level level){
 	return min;
 }
 
+/*
 //second eviction algorithm - Randomly selected
 vAddr evict_random(Level level){
 
@@ -138,6 +143,7 @@ vAddr evict_random(Level level){
 	return to_evict;
 
 }
+*/
 
 vAddr (*get_page_to_evict)(Level); // Pointer to the eviction function/algorithm to use
 
@@ -448,6 +454,6 @@ void init_arrays(){
 //Run the actual memory management tool
 int main(){
 	init_arrays();			// setup
-	get_page_to_evict = &evict_LRU; // set the page eviction algorithm
+	get_page_to_evict = &evict_Random;//&evict_LRU; // set the page eviction algorithm
 	memoryMaxer();			// test
 }
